@@ -8,17 +8,20 @@ from typing import Optional
 import logging
 import json
 import traceback
+import os
 from datetime import datetime
 from dotenv import load_dotenv
 from groq import Groq
-from mcp_server import mcp
+
+# Load environment variables from .env file FIRST (before importing config)
+load_dotenv()
+
+from mcp_server import mcp, set_sailpoint_api
+from sailpoint_api import SailPointAPI, SailPointAPIClient
 from config import (
     GROQ_API_KEY, GROQ_MODEL,
     ALLOWED_ORIGINS, LLM_TEMPERATURE, LLM_MAX_TOKENS
 )
-
-# Load environment variables from .env file
-load_dotenv()
 
 # Configure logging - write everything to file
 import sys
@@ -192,8 +195,9 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         content={"detail": exc.errors(), "body": exc.body}
     )
 
-# Initialize Groq client
+# Initialize clients
 groq_client = None
+sailpoint_api = None
 
 
 class ChatMessage(BaseModel):
@@ -208,8 +212,8 @@ class ChatResponse(BaseModel):
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize Groq client on startup"""
-    global groq_client
+    """Initialize Groq client and SailPoint API on startup"""
+    global groq_client, sailpoint_api
     # Force write to log file on startup
     logger.info("=" * 60)
     logger.info("Starting SailPoint Support Bot Backend")
@@ -220,6 +224,7 @@ async def startup_event():
         if isinstance(handler, logging.FileHandler):
             handler.flush()
     
+    # Initialize Groq client
     if not GROQ_API_KEY:
         logger.warning("[WARNING] GROQ_API_KEY not found in environment variables")
         logger.warning("Please set GROQ_API_KEY in .env file")
@@ -230,6 +235,24 @@ async def startup_event():
             logger.info(f"Using model: {GROQ_MODEL}")
         except Exception as e:
             logger.error(f"[ERROR] Failed to initialize Groq client: {str(e)}")
+    
+    # Initialize SailPoint API (authentication happens here with secrets)
+    try:
+        # Backend handles token retrieval with client_id and secret
+        sailpoint_api = SailPointAPI()
+        logger.info("[OK] SailPoint API authenticated successfully")
+        logger.info("[OK] Token obtained and stored in memory by backend")
+        
+        # Create MCP-safe wrapper (only token and API methods, no credentials or token endpoint)
+        mcp_client = SailPointAPIClient(sailpoint_api)
+        logger.info("[OK] MCP-safe client created (token + API endpoints only)")
+        
+        # Pass wrapper to MCP server (MCP never sees credentials or token endpoint)
+        set_sailpoint_api(mcp_client)
+        logger.info("[OK] MCP client passed to MCP server (no credentials or token endpoint exposed)")
+    except Exception as e:
+        logger.error(f"[ERROR] Failed to initialize SailPoint API: {str(e)}")
+        logger.warning("[WARNING] MCP tools will not work without SailPoint API authentication")
     
     logger.info("MCP Server mounted at /mcp endpoint")
     logger.info("MCP Tools: trigger_identity_refresh, check_request_status, get_identity_info")

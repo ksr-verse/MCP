@@ -163,3 +163,49 @@ class SailPointAPI:
             "user_id": user_id,
             "note": "get_identity_info is a dummy tool - no SailPoint API URL available"
         }
+
+
+class SailPointAPIClient:
+    """
+    MCP-safe wrapper for SailPoint API.
+    Only exposes API methods - NO credentials, token endpoint, or token retrieval methods.
+    This class is what gets passed to MCP server.
+    MCP is unaware that token retrieval exists or how tokens are obtained.
+    """
+    
+    def __init__(self, sailpoint_api_instance: SailPointAPI):
+        """
+        Initialize with authenticated SailPointAPI instance.
+        MCP receives only API methods - no credentials or token endpoint access.
+        
+        Args:
+            sailpoint_api_instance: Fully authenticated SailPointAPI instance (with token already obtained by backend)
+        """
+        self._api = sailpoint_api_instance  # Private reference - MCP cannot access internal methods
+        self.base_url = sailpoint_api_instance.base_url  # Only base URL, NOT token endpoint
+        
+        logger.info("[MCP Client] SailPointAPIClient initialized")
+        logger.info("[MCP Client] MCP has access to: API methods only")
+        logger.info("[MCP Client] MCP does NOT have access to: credentials, token endpoint, or token retrieval methods")
+    
+    def trigger_refresh(self, user_id: str) -> Dict[str, Any]:
+        """
+        Trigger identity refresh - MCP-safe method.
+        Token refresh happens internally in SailPointAPI if needed.
+        MCP is unaware of token retrieval process.
+        """
+        return self._api.trigger_refresh(user_id)
+    
+    def get_request_status(self, request_id: str) -> Dict[str, Any]:
+        """
+        Check request status - MCP-safe method.
+        Token refresh happens internally in SailPointAPI if needed.
+        """
+        return self._api.get_request_status(request_id)
+    
+    def get_identity(self, user_id: str) -> Dict[str, Any]:
+        """
+        Get identity info - MCP-safe method.
+        Token refresh happens internally in SailPointAPI if needed.
+        """
+        return self._api.get_identity(user_id)

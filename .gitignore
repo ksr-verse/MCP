@@ -37,3 +37,7 @@ Thumbs.db
 .env
 .env.local
 .env.*.local
+
+# Images
+Images/
+images/

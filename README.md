@@ -92,7 +92,58 @@ The frontend will run at `http://localhost:3000`
 
 **Note:** Make sure the backend is running at `http://localhost:8000` before starting the frontend.
 
-## Architecture
+
+### Architecture Overview
+
+#### Component Layers
+
+**User Layer**
+- User interacts via browser
+- React chat interface at `http://localhost:3000`
+
+**Frontend Layer**
+- React app with chat UI
+- Sends POST requests to `/chat`
+
+**Backend Layer (FastAPI)**
+- Main server (`main.py`) on port 8000
+- Endpoints: `/chat`, `/health`, `/mcp`
+- Groq LLM integration with function calling
+- Configuration from `config.py` and `.env`
+- Logging to `sailpoint_bot.log`
+
+**MCP Server Layer**
+- FastMCP server (`mcp_server.py`)
+- Three MCP tools: `trigger_identity_refresh`, `check_request_status`, `get_identity_info`
+- Receives authenticated API instance (no secrets)
+
+**SailPoint Integration Layer**
+- OAuth 2.0 authentication
+- API methods for SailPoint operations
+- Secrets stored only in `sailpoint_api.py`
+
+#### Security Flow
+
+1. **Startup**: `main.py` initializes `SailPointAPI` (uses secrets from `.env`)
+2. **Authentication**: OAuth token obtained using `CLIENT_ID` + `CLIENT_SECRET`
+3. **Instance passing**: Authenticated instance passed to MCP via `set_sailpoint_api()`
+4. **MCP tools**: Use authenticated instance (no access to secrets)
+
+#### Request Flow
+
+1. User sends message → React → `/chat` endpoint
+2. LLM analysis → Groq LLM reads message + system prompt
+3. Tool selection → LLM decides which MCP tool to call
+4. MCP execution → Tool calls SailPoint API method
+5. SailPoint API → OAuth authenticated request to SailPoint IIQ
+6. Response → SailPoint response → LLM formats → User sees result
+
+#### Data Flow
+
+- **Secrets**: `.env` → `config.py` → `sailpoint_api.py` (only here)
+- **Authentication**: `main.py` startup → `SailPointAPI` initialization → Token obtained
+- **Token**: Stored in `SailPointAPI` instance → Passed to MCP (no secrets)
+- **Requests**: User → Frontend → Backend → LLM → MCP → SailPoint API → Response
 
 ### What is MCP (Model Context Protocol)?
 
@@ -101,22 +152,6 @@ MCP (Model Context Protocol) is an open protocol originally proposed by Anthropi
 ### Our Implementation
 
 We use **FastMCP** from the official MCP SDK combined with **Groq's Function Calling**:
-
-```
-User Message
-    ↓
-Groq LLM (with tool definitions)
-    ↓
-LLM decides which tool to call
-    ↓
-MCP Tool Execution (mcp_server.py)
-    ↓
-SailPoint IIQ API
-    ↓
-Return result to LLM
-    ↓
-LLM formats response for user
-```
 
 ### MCP Components
 
